@@ -64,7 +64,7 @@ namespace NShim.Tests
             
             var resultList = (List<string>)rewrite.Invoke(null, new object[]{ new List<string>(), context });
             Assert.NotNull(resultList);
-            Assert.Equal(0, resultList.Count);
+            Assert.Empty(resultList);
 
             info = typeof(ExampleStruct).GetConstructor(new[] { typeof(int) });
             rewrite = ILRewriter.Rewrite(info, new ShimContext());

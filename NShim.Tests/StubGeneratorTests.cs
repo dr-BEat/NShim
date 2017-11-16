@@ -60,7 +60,7 @@ namespace NShim.Tests
 
             var resultList = (List<string>)stub.Invoke(null, new object[] { new ShimContext() });
             Assert.NotNull(resultList);
-            Assert.Equal(0, resultList.Count);
+            Assert.Empty(resultList);
 
             info = typeof(ExampleStruct).GetConstructor(new[] { typeof(int) });
             stub = StubGenerator.GenerateStub(info);
