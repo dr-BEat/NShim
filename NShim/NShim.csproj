@@ -4,4 +4,28 @@
     <TargetFramework>netstandard2.0</TargetFramework>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Mono.Reflection" Version="1.1.0" />
+    <PackageReference Include="System.Reflection.Emit.Lightweight" Version="4.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="ShimBuilder.tt">
+      <Generator>TextTemplatingFileGenerator</Generator>
+      <LastGenOutput>ShimBuilder.cs</LastGenOutput>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Service Include="{508349b6-6b84-4df5-91f0-309beebad82d}" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="ShimBuilder.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>ShimBuilder.tt</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
 </Project>
