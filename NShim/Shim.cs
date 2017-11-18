@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using NShim.Helpers;
 
 [assembly: InternalsVisibleTo("NShim.Tests")]
 
@@ -8,11 +9,10 @@ namespace NShim
 {
     public partial class Shim
     {
-        public Shim(Delegate original, Delegate target)
-        {
-            //Original = original;
-            //Target = target;
-        }
+        public MethodBase Original { get; }
+        public object Instance { get; }
+        public MethodInfo Target { get; }
+        public object TargetInstance { get; }
 
         public Shim(MethodBase original, object instance, MethodInfo target)
         {
@@ -21,15 +21,28 @@ namespace NShim
             Target = target;
         }
 
-        public MethodBase Original { get; }
-        public object Instance { get; }
-        public MethodInfo Target { get; }
+        public Shim(MethodBase original, object instance, MethodInfo target, object targetInstance)
+        {
+            Original = original;
+            Instance = instance;
+            Target = target;
+            TargetInstance = targetInstance;
+        }
 
+        public Shim(Delegate methodgroup, Delegate shim)
+        {
+        }
+
+        /// <summary>
+        /// Runs the given action while applying all given shims
+        /// </summary>
+        /// <param name="action"></param>
+        /// <param name="shims"></param>
         public static void Isolate(Action action, params Shim[] shims)
         {
             var shimContext = new ShimContext(shims);
             var rewrite = ILRewriter.Rewrite(action.Method, shimContext);
-            rewrite.Invoke(null, new object[] { action.Target, shimContext });
+            rewrite.Invoke(null, new [] { action.Target, shimContext });
         }
 
         public static ShimBuilder2 Replace(Delegate original)
@@ -51,9 +64,6 @@ namespace NShim
         {
             return default(ShimBuilder);
         }
-
-        public class RequireStruct<T> where T : struct { }
-        public class RequireClass<T> where T : class { }
     }
 
     public struct ShimBuilderStruct<T>
@@ -78,7 +88,7 @@ namespace NShim
 
         public ShimBuilderStructFunc<T, T1, TResult> Replace<TResult>(Func<T1, TResult> func)
         {
-            return default(ShimBuilderStructFunc<T, T1, TResult>);
+            return new ShimBuilderStructFunc<T, T1, TResult>(func);
         }
     }
 
@@ -105,9 +115,16 @@ namespace NShim
 
     public struct ShimBuilderStructFunc<T, T1, TResult>
     {
+        private readonly Func<T1, TResult> _original;
+
+        public ShimBuilderStructFunc(Func<T1, TResult> original)
+        {
+            _original = original;
+        }
+
         public Shim With(FuncRef<T, T1, TResult> funcRef)
         {
-            return default(Shim);
+            return new Shim(_original.Method, null, funcRef.Method, funcRef.Target);
         }
     }
 

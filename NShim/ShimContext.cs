@@ -1,7 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Reflection;
-using System.Text;
 
 namespace NShim
 {
@@ -28,7 +26,7 @@ namespace NShim
             shim = null;
             return false;
         }
-
+        
         public MethodBase GetMethod(MethodBase original, object instance)
         {
             if (TryGetMatchingShim(original, instance, out var shim))

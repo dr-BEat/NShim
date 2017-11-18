@@ -1,5 +1,4 @@
 ﻿using System;
-using System.IO;
 using Xunit;
 
 namespace NShim.Tests
@@ -9,29 +8,15 @@ namespace NShim.Tests
         [Fact]
         public void ReplaceTest()
         {
-            Shim.ReplaceAction(Console.WriteLine);
-            Shim.ReplaceAction<string>(Console.WriteLine);
-            Shim.ReplaceAction<string, object[]>(Console.WriteLine);
+            var shim = Shim.For<DateTime>()
+                           .WithParameters<long>()
+                           .Replace(It.Any<DateTime>().AddTicks)
+                           .With((ref DateTime time, long l) => time);
+            Assert.Null(shim.Instance);
+            Assert.NotNull(shim.Original);
+            Assert.NotNull(shim.Target);
+            Assert.NotNull(shim.TargetInstance);
 
-            Shim.ReplaceFunc(Console.ReadLine);
-            Shim.ReplaceFunc<int, Stream>(Console.OpenStandardOutput);
-
-            Shim<int>.Replace(Console.OpenStandardOutput)
-                .With(i => null);
-
-            Shim<int, int>.Replace(DateTime.DaysInMonth)
-                .With((i, i1) => 0);
-
-            Shim.Replace((Action<string>)Console.Out.WriteLine)
-                .With((Action<TextWriter, string>)((t, s) => { }));
-
-            Shim.Replace((Func<int, int, int>)DateTime.DaysInMonth)
-                .With((FuncRef<DateTime, int, int, int>)((ref DateTime time, int i, int arg3) => Sdd(ref time, i, arg3)));
-
-            /*Shim.For<DateTime>()
-                .WithParameters<long>()
-                .Replace(It.Any<DateTime>().AddTicks)
-                .With((ref DateTime time, long l) => time);
             Shim.For<DateTime>()
                 .WithParameters<int, int>()
                 .Replace(DateTime.DaysInMonth)
@@ -40,7 +25,8 @@ namespace NShim.Tests
                 .WithParameters<int>()
                 .Replace(It.Any<string>().Substring)
                 .With((s, i) => s);
-            Shim.WithParameters<int>()
+            
+            /*Shim.WithParameters<int>()
                 .Replace(It.Any<string>().Substring)
                 .On<string>() ???
                 .With((s, i) => s);
