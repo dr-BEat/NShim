@@ -20,6 +20,15 @@ namespace NShim.Tests
         }
 
         [Fact]
+        public void IsAny()
+        {
+            Assert.False(It.IsAny(null));
+            Assert.True(It.IsAny((object)false));
+            Assert.True(It.IsAny(It.Any<object>()));
+            Assert.True(It.IsAny((object)It.Any<ExampleClass>()));
+        }
+
+        [Fact]
         public void MethodGroupAny()
         {
             Func<int, string> group = It.Any<string>().Substring;

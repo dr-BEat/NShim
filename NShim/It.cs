@@ -44,6 +44,24 @@ namespace NShim
         /// <param name="value"></param>
         /// <param name="_"></param>
         /// <returns></returns>
+        public static bool IsAny(object value)
+        {
+            if (value == null)
+                return false;
+            var type = value.GetType();
+            if (type.IsValueType)
+                return true;
+            var markerObject = typeof(Helper<>).MakeGenericType(type).GetField(nameof(Helper<object>.Value)).GetValue(null);
+            return ReferenceEquals(markerObject, value);
+        }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="value"/> was produced by <see cref="Any"/>.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="value"></param>
+        /// <param name="_"></param>
+        /// <returns></returns>
         public static bool IsAny<T>(T value, RequireStruct<T> _ = null) where T : struct 
         {
             return true;
