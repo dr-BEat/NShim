@@ -7,7 +7,13 @@
             Factor = factor;
         }
 
-        public int Factor { get; }
+        public int Factor { get; set; }
+
+        public int this[int number]
+        {
+            get { return number * 2; }
+            set { }
+        }
 
         public static int StaticTestMethod(int a)
         {

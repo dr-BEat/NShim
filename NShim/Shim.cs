@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using NShim.Helpers;
@@ -11,26 +12,24 @@ namespace NShim
     {
         public MethodBase Original { get; }
         public object Instance { get; }
-        public MethodInfo Target { get; }
-        public object TargetInstance { get; }
+        public Delegate Replacement { get; }
 
-        public Shim(MethodBase original, object instance, MethodInfo target)
+        public Shim(Delegate original, Delegate replacement) : this(original.Method, It.IsAny(original.Target) ? null : original.Target, replacement)
         {
-            Original = original;
-            Instance = instance;
-            Target = target;
         }
 
-        public Shim(MethodBase original, object instance, MethodInfo target, object targetInstance)
+        public Shim(MethodBase original, Delegate replacement) : this(original, null, replacement)
         {
-            Original = original;
-            Instance = instance;
-            Target = target;
-            TargetInstance = targetInstance;
         }
 
-        public Shim(Delegate methodgroup, Delegate shim)
+        public Shim(MethodBase original, object instance, Delegate replacement)
         {
+            if(!ValidateReplacementMethodSignature(original, replacement.Method, out var error))
+                throw new ArgumentException($"Invalid replacement method signature! Error: {error}", nameof(replacement));
+
+            Original = original;
+            Instance = instance;
+            Replacement = replacement;
         }
 
         /// <summary>
@@ -45,9 +44,43 @@ namespace NShim
             rewrite.Invoke(null, new [] { action.Target, shimContext });
         }
 
-        public static ShimBuilder2 Replace(Delegate original)
+        public static bool ValidateReplacementMethodSignature(MethodBase original, MethodInfo replacement, out string error)
         {
-            return new ShimBuilder2(original);
+            var returnType = original.IsConstructor ? original.DeclaringType : ((MethodInfo)original).ReturnType;
+            if (returnType != replacement.ReturnType)
+            {
+                error = $"Wrong Return type, expected {returnType} got {replacement.ReturnType}.";
+                return false;
+            }
+
+            var replacementsParameters = replacement.GetParameters()
+                                                    .Select(p => p.ParameterType)
+                                                    .ToList();
+            if (!original.IsStatic && !original.IsConstructor)
+            {
+                var thisType = original.DeclaringType.IsValueType
+                    ? original.DeclaringType.MakeByRefType()
+                    : original.DeclaringType;
+                
+                if (thisType != replacementsParameters.FirstOrDefault())
+                {
+                    error = $"Missing or wrong first parameter, expected {thisType} got {replacementsParameters.FirstOrDefault()}.";
+                    return false;
+                }
+                replacementsParameters = replacementsParameters.Skip(1).ToList();
+            }
+
+            if (!original.GetParameters().Select(p => p.ParameterType)
+                         .SequenceEqual(replacementsParameters))
+            {
+                var excpected = string.Join(", ", original.GetParameters().Select(p => p.ParameterType));
+                var got = string.Join(", ", replacementsParameters);
+                error = $"Wrong type or number of parameters, expected {excpected} got {got}.";
+                return false;
+            }
+
+            error = null;
+            return true;
         }
 
         public static ShimBuilderStruct<T> For<T>(RequireStruct<T> _ = null) where T : struct
@@ -124,7 +157,7 @@ namespace NShim
 
         public Shim With(FuncRef<T, T1, TResult> funcRef)
         {
-            return new Shim(_original.Method, null, funcRef.Method, funcRef.Target);
+            return new Shim(_original.Method, funcRef);
         }
     }
 
@@ -181,23 +214,7 @@ namespace NShim
     /// <typeparam name="TResult">The type of the return value of the method that this delegate encapsulates.</typeparam>
     /// <returns></returns>
     public delegate TResult FuncRef<T1, in T2, in T3, out TResult>(ref T1 arg1, T2 arg2, T3 arg3);
-
-
-    public struct ShimBuilder2
-    {
-        private readonly Delegate _original;
-
-        public ShimBuilder2(Delegate original)
-        {
-            _original = original;
-        }
-
-        public Shim With(Delegate target)
-        {
-            return new Shim(_original, target);
-        }
-    }
-
+    
     public static class Shim<T1>
     {
         public static ShimBuilder<T1> Replace(Action<T1> methodgroup)

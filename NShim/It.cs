@@ -1,5 +1,5 @@
-﻿using System.Runtime.Serialization;
-using NShim.Helpers;
+﻿using System;
+using System.Runtime.Serialization;
 
 namespace NShim
 {
@@ -11,20 +11,24 @@ namespace NShim
         /// <typeparam name="T"></typeparam>
         /// <param name="_"></param>
         /// <returns></returns>
-        public static T Any<T>(RequireStruct<T> _ = null) where T : struct
+        public static T Any<T>()
         {
-            return default(T);
+            if (typeof(T).IsValueType)
+                return default(T);
+            return (T)Any(typeof(T));
         }
 
         /// <summary>
-        /// Returns a marker instance of type <typeparamref name="T" />.
+        /// Returns a marker instance of type.
         /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="_"></param>
+        /// <param name="type"></param>
         /// <returns></returns>
-        public static T Any<T>(RequireClass<T> _ = null) where T : class
+        public static object Any(Type type)
         {
-            return Helper<T>.Value;
+            if (type.IsValueType)
+                return Activator.CreateInstance(type);
+            var markerObject = typeof(Helper<>).MakeGenericType(type).GetField(nameof(Helper<object>.Value)).GetValue(null);
+            return markerObject;
         }
 
         /// <summary>
@@ -44,6 +48,19 @@ namespace NShim
         /// <param name="value"></param>
         /// <param name="_"></param>
         /// <returns></returns>
+        public static bool IsAny<T>(T value)
+        {
+            if (typeof(T).IsValueType)
+                return true;
+            return IsAny((object)value);
+        }
+
+
+        /// <summary>
+        /// Returns true if the given <paramref name="value"/> was produced by <see cref="Any"/>.
+        /// </summary>
+        /// <param name="value"></param>
+        /// <returns></returns>
         public static bool IsAny(object value)
         {
             if (value == null)
@@ -51,32 +68,7 @@ namespace NShim
             var type = value.GetType();
             if (type.IsValueType)
                 return true;
-            var markerObject = typeof(Helper<>).MakeGenericType(type).GetField(nameof(Helper<object>.Value)).GetValue(null);
-            return ReferenceEquals(markerObject, value);
-        }
-
-        /// <summary>
-        /// Returns true if the given <paramref name="value"/> was produced by <see cref="Any"/>.
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="value"></param>
-        /// <param name="_"></param>
-        /// <returns></returns>
-        public static bool IsAny<T>(T value, RequireStruct<T> _ = null) where T : struct 
-        {
-            return true;
-        }
-
-        /// <summary>
-        /// Returns true if the given <paramref name="value"/> was produced by <see cref="Any"/>.
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="value"></param>
-        /// <param name="_"></param>
-        /// <returns></returns>
-        public static bool IsAny<T>(T value, RequireClass<T> _ = null) where T : class
-        {
-            return ReferenceEquals(Helper<T>.Value, value);
+            return ReferenceEquals(Any(type), value);
         }
     }
 }

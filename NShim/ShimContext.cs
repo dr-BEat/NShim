@@ -26,12 +26,16 @@ namespace NShim
             shim = null;
             return false;
         }
-        
-        public MethodBase GetMethod(MethodBase original, object instance)
+
+        public MethodBase GetReplacement(MethodBase original, object instance, out object replacementInstance)
         {
             if (TryGetMatchingShim(original, instance, out var shim))
-                return shim.Target;
-            if(_cache.TryGetValue(original, out var target))
+            {
+                replacementInstance = shim.Replacement.Target;
+                return shim.Replacement.Method;
+            }
+            replacementInstance = null;
+            if (_cache.TryGetValue(original, out var target))
                 return target;
             return original;
         }
