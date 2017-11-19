@@ -74,17 +74,17 @@ namespace NShim.Tests
             Assert.Equal(3, resultStruct.Factor);
         }
 
-        [Fact(Skip = "Should be fixed with a better way to refer to methods")]
+        [Fact]
         public void RewriteLocalMethod()
         {
             int TestMethod(int a)
             {
                 return a * 2;
             }
-            var methodInfo = ((Func<int, int>)TestMethod).Method;
-            var rewrite = ILRewriter.Rewrite(methodInfo, new ShimContext());
+            Func<int, int> func = TestMethod;
+            var rewrite = ILRewriter.Rewrite(func.Method, new ShimContext());
 
-            var result = (int)rewrite.Invoke(null, new object[] { 3 });
+            var result = (int)rewrite.Invoke(null, new[] { func.Target, 3, new ShimContext() });
 
             Assert.Equal(6, result);
         }

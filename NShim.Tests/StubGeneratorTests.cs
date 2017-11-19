@@ -71,17 +71,17 @@ namespace NShim.Tests
 
         }
 
-        [Fact(Skip = "Should be fixed with a better way to refer to methods")]
+        [Fact]
         public void GenerateStubTestLocalMethod()
         {
             int TestMethod(int a)
             {
                 return a * 2;
             }
-            var methodInfo = ((Func<int, int>) TestMethod).Method;
-            var stub = StubGenerator.GenerateStubForMethod(methodInfo);
+            Func<int, int> func = TestMethod;
+            var stub = StubGenerator.GenerateStubForMethod(func.Method);
 
-            var result = (int)stub.Invoke(null, new object[] {3, new ShimContext()});
+            var result = (int)stub.Invoke(null, new[] { func.Target, 3, new ShimContext()});
 
             Assert.Equal(6, result);
         }
