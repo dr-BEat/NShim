@@ -15,6 +15,12 @@
             set { }
         }
 
+        public int this[int number, string test]
+        {
+            get { return number * 2; }
+            set { }
+        }
+
         public static int StaticTestMethod(int a)
         {
             return a * 2;

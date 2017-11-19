@@ -148,5 +148,19 @@ namespace NShim.Tests
             }, Shim.ReplaceSetter(() => It.Any<ExampleClass>()[It.Any<int>()])
                 .With((Action<ExampleClass, int, int>)((@this, index, value) => { called = true; })));
         }
+
+        [Fact]
+        public void ShimIndexerSetterTest2()
+        {
+            var exampleClass = new ExampleClass(2);
+            var called = false;
+            Shim.Isolate(() =>
+            {
+                Assert.False(called);
+                exampleClass[3, ""] = 1;
+                Assert.True(called);
+            }, Shim.ReplaceSetter(() => It.Any<ExampleClass>()[It.Any<int>(), It.Any<string>()])
+                .With((Action<ExampleClass, int, string, int>)((@this, index, str, value) => { called = true; })));
+        }
     }
 }

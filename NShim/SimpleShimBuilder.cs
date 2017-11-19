@@ -23,7 +23,11 @@ namespace NShim
             var value = Expression.Constant(It.Any<T>(), typeof(T));
             if (original.Body is MethodCallExpression callExpression && callExpression.Method.Name == "get_Item")
             {
-                var itemProperty = callExpression.Method.DeclaringType.GetProperty("Item");
+                //Get Matching setter method for the indexer
+                var parameterTypes = callExpression.Method.GetParameters()
+                                                   .Select(p => p.ParameterType)
+                                                   .ToArray();
+                var itemProperty = callExpression.Method.DeclaringType.GetProperty("Item", typeof(T), parameterTypes);
                 
                 var assign = Expression.Call(callExpression.Object, itemProperty.SetMethod, callExpression.Arguments.Concat(new [] { value }));
                 return new SimpleShimBuilder(assign.GetMethodFromExpression(out var instance), instance);
