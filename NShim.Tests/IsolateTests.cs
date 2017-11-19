@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Reflection;
-using System.Text;
 using NShim.Tests.Examples;
 using Xunit;
 
@@ -161,6 +158,25 @@ namespace NShim.Tests
                 Assert.True(called);
             }, Shim.ReplaceSetter(() => It.Any<ExampleClass>()[It.Any<int>(), It.Any<string>()])
                 .With((Action<ExampleClass, int, string, int>)((@this, index, str, value) => { called = true; })));
+        }
+
+        private delegate void OutTestFunc(int a, out int b);
+        private delegate void OutTestReplacementFunc(ExampleClass @this, int a, out int b);
+        [Fact]
+        public void ShimOutParamMethod()
+        {
+            var shim = new Shim((OutTestFunc)It.Any<ExampleClass>().OutTestMethod,
+                (OutTestReplacementFunc)((ExampleClass @this, int a, out int b) => b = a));
+
+            var exampleClass = new ExampleClass(2);
+            
+            exampleClass.OutTestMethod(3, out var result);
+            Assert.Equal(6, result);
+            Shim.Isolate(() =>
+            {
+                exampleClass.OutTestMethod(3, out result);
+                Assert.Equal(3, result);
+            }, shim);
         }
     }
 }

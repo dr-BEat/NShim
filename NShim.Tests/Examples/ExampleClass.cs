@@ -35,5 +35,15 @@
         {
             return a * Factor;
         }
+
+        public void OutTestMethod(int a, out int b)
+        {
+            b = a * Factor;
+        }
+
+        public void RefTestMethod(int a, ref int b)
+        {
+            b = a * Factor;
+        }
     }
 }
