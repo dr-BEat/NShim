@@ -10,7 +10,7 @@ namespace NShim
 {
     internal class ILRewriter
     {
-        public static MethodBase Rewrite(MethodBase method, ShimContext context)
+        public static MethodInfo Rewrite(MethodBase method, ShimContext context)
         {
             var parameterTypes = new List<Type>();
             if (!method.IsStatic)
@@ -66,25 +66,28 @@ namespace NShim
                 switch (instruction.OpCode.OperandType)
                 {
                     case OperandType.InlineNone:
-                        EmitILForInlineNone(ilGenerator, instruction);
+                        ilGenerator.Emit(instruction.OpCode);
                         break;
                     case OperandType.InlineI:
-                        EmitILForInlineI(ilGenerator, instruction);
+                        ilGenerator.Emit(instruction.OpCode, (int) instruction.Operand);
                         break;
                     case OperandType.InlineI8:
-                        EmitILForInlineI8(ilGenerator, instruction);
+                        ilGenerator.Emit(instruction.OpCode, (long) instruction.Operand);
                         break;
                     case OperandType.ShortInlineI:
-                        EmitILForShortInlineI(ilGenerator, instruction);
+                        if (instruction.OpCode == OpCodes.Ldc_I4_S)
+                            ilGenerator.Emit(instruction.OpCode, (sbyte) instruction.Operand);
+                        else
+                            ilGenerator.Emit(instruction.OpCode, (byte) instruction.Operand);
                         break;
                     case OperandType.InlineR:
-                        EmitILForInlineR(ilGenerator, instruction);
+                        ilGenerator.Emit(instruction.OpCode, (double) instruction.Operand);
                         break;
                     case OperandType.ShortInlineR:
-                        EmitILForShortInlineR(ilGenerator, instruction);
+                        ilGenerator.Emit(instruction.OpCode, (float) instruction.Operand);
                         break;
                     case OperandType.InlineString:
-                        EmitILForInlineString(ilGenerator, instruction);
+                        ilGenerator.Emit(instruction.OpCode, (string) instruction.Operand);
                         break;
                     case OperandType.ShortInlineBrTarget:
                     case OperandType.InlineBrTarget:
@@ -109,44 +112,6 @@ namespace NShim
             }
 
             return dynamicMethod;
-        }
-
-        private static void EmitILForInlineNone(ILGenerator ilGenerator, Instruction instruction)
-        {
-            ilGenerator.Emit(instruction.OpCode);
-        }
-
-        private static void EmitILForInlineI(ILGenerator ilGenerator, Instruction instruction)
-        {
-            ilGenerator.Emit(instruction.OpCode, (int) instruction.Operand);
-        }
-
-        private static void EmitILForInlineI8(ILGenerator ilGenerator, Instruction instruction)
-        {
-            ilGenerator.Emit(instruction.OpCode, (long) instruction.Operand);
-        }
-
-        private static void EmitILForShortInlineI(ILGenerator ilGenerator, Instruction instruction)
-        {
-            if (instruction.OpCode == OpCodes.Ldc_I4_S)
-                ilGenerator.Emit(instruction.OpCode, (sbyte) instruction.Operand);
-            else
-                ilGenerator.Emit(instruction.OpCode, (byte) instruction.Operand);
-        }
-
-        private static void EmitILForInlineR(ILGenerator ilGenerator, Instruction instruction)
-        {
-            ilGenerator.Emit(instruction.OpCode, (double) instruction.Operand);
-        }
-
-        private static void EmitILForShortInlineR(ILGenerator ilGenerator, Instruction instruction)
-        {
-            ilGenerator.Emit(instruction.OpCode, (float) instruction.Operand);
-        }
-
-        private static void EmitILForInlineString(ILGenerator ilGenerator, Instruction instruction)
-        {
-            ilGenerator.Emit(instruction.OpCode, (string) instruction.Operand);
         }
 
         private static void EmitILForInlineBrTarget(ILGenerator ilGenerator,
@@ -278,10 +243,14 @@ namespace NShim
             {
                 stub = StubGenerator.GenerateStubForVirtualMethod(methodInfo);
             }
-            else if (instruction.OpCode == OpCodes.Ldftn)
+            /*else if (instruction.OpCode == OpCodes.Ldftn)
             {
                 stub = StubGenerator.GenerateStubForMethodPointer(methodInfo);
             }
+            else if (instruction.OpCode == OpCodes.Ldvirtftn)
+            {
+                stub = StubGenerator.GenerateStubForMethodPointer(methodInfo);
+            }*/
             else
             {
                 ilGenerator.Emit(instruction.OpCode, methodInfo);

@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Linq;
 using System.Reflection;
-using System.Reflection.Emit;
 using System.Runtime.Serialization;
 using NShim.Helpers;
+using Sigil.NonGeneric;
 
 namespace NShim
 {
@@ -11,6 +11,8 @@ namespace NShim
     {
         private static readonly MethodInfo ShimContextGetReplacement =
             typeof(ShimContext).GetMethod(nameof(ShimContext.GetReplacement));
+        private static readonly MethodInfo ShimContextTryGetReplacement =
+            typeof(ShimContext).GetMethod(nameof(ShimContext.TryGetReplacement));
         private static readonly MethodInfo MethodBaseGetMethodPointer =
             typeof(MethodBaseExtensions).GetMethod(nameof(MethodBaseExtensions.GetMethodPointer), BindingFlags.Static | BindingFlags.Public);
         private static readonly MethodInfo MethodBaseGetMethodFromHandle = 
@@ -40,68 +42,86 @@ namespace NShim
             var parameterTypes = new Type[signatureParamTypes.Length + 1];
             signatureParamTypes.CopyTo(parameterTypes, 0);
             parameterTypes[parameterTypes.Length - 1] = typeof(ShimContext);
-
-            // ILGenerator
-            var stub = new DynamicMethod(
-                string.Format("stub_{0}_{1}", info.DeclaringType, info.Name),
-                info.ReturnType,
-                parameterTypes,
-                typeof(StubGenerator).Module,
-                true);
-
-            var ilGenerator = stub.GetILGenerator();
-
-            var localInstance = ilGenerator.DeclareLocal(typeof(object));
-            var localMethodPtr = ilGenerator.DeclareLocal(typeof(IntPtr));               //Actual method
-
-            ilGenerator.Emit(OpCodes.Ldarg, parameterTypes.Length - 1); //Load ShimContext on stack
+            
+            var stub = Emit.NewDynamicMethod(info.ReturnType, parameterTypes,
+                string.Format("stub_{0}_{1}", info.DeclaringType, info.Name));
+            
+            stub.DeclareLocal<MethodBase>(out var localMethod, "method");
+            stub.DeclareLocal<object>(out var localInstance, "instance");
+            
+            stub.LoadArgument((ushort) (parameterTypes.Length - 1));//Load ShimContext on stack
 
             if (!isVirtual)
             {
-                ilGenerator.Emit(OpCodes.Ldtoken, info);
-                ilGenerator.Emit(OpCodes.Ldtoken, info.DeclaringType);
-                ilGenerator.Emit(OpCodes.Call, MethodBaseGetMethodFromHandle);
+                stub.LoadConstant(info);
+                stub.LoadConstant(info.DeclaringType);
+                stub.Call(MethodBaseGetMethodFromHandle);
             }
             else
             {
                 //Load this and find the actual type to look up the actual called method
-                ilGenerator.Emit(OpCodes.Ldarg_0);
-                ilGenerator.Emit(OpCodes.Call, ObjectGetType);
+                stub.LoadArgument(0);
+                stub.Call(ObjectGetType);
 
-                ilGenerator.Emit(OpCodes.Ldtoken, info);
-                ilGenerator.Emit(OpCodes.Ldtoken, info.DeclaringType);
-                ilGenerator.Emit(OpCodes.Call, MethodBaseGetMethodFromHandle);
+                stub.LoadConstant(info);
+                stub.LoadConstant(info.DeclaringType);
+                stub.Call(MethodBaseGetMethodFromHandle);
 
-                ilGenerator.Emit(OpCodes.Call, StubGeneratorGetRuntimeMethodForVirtual);
+                stub.CastClass<MethodInfo>();
+
+                stub.Call(StubGeneratorGetRuntimeMethodForVirtual);
             }
 
-            ilGenerator.Emit(info.IsStatic ? OpCodes.Ldnull : OpCodes.Ldarg_0);  //Instance parameter for GetReplacement
-            ilGenerator.Emit(OpCodes.Ldloca, localInstance.LocalIndex);          //Replacement instance out parameter
-            ilGenerator.Emit(OpCodes.Call, ShimContextGetReplacement);
-            ilGenerator.Emit(OpCodes.Call, MethodBaseGetMethodPointer);
-            ilGenerator.Emit(OpCodes.Stloc, localMethodPtr.LocalIndex);
+            if (info.IsStatic || info.DeclaringType.IsValueType)
+            {
+                stub.LoadNull();
+            }
+            else
+            {
+                stub.LoadArgument(0);
+            }
+            //Instance parameter for GetReplacement
+
+            stub.LoadLocalAddress(localMethod);
+            stub.LoadLocalAddress(localInstance); //Replacement instance out parameter
+            stub.Call(ShimContextTryGetReplacement);
+
+            stub.DefineLabel(out var noReplacementFound);
+
+            stub.BranchIfFalse(noReplacementFound);
 
             //Branch if we do not have an instance for our replacement
-            var staticReplacement = ilGenerator.DefineLabel();
-            ilGenerator.Emit(OpCodes.Ldloc, localInstance.LocalIndex);
-            ilGenerator.Emit(OpCodes.Brfalse_S, staticReplacement);
+            stub.DefineLabel(out var staticReplacement);
+            stub.LoadLocal(localInstance);
+            stub.BranchIfFalse(staticReplacement);
 
-            ilGenerator.Emit(OpCodes.Ldloc, localInstance.LocalIndex);
-            for (var i = 0; i < signatureParamTypes.Length; i++)
-                ilGenerator.Emit(OpCodes.Ldarg, i);
-            ilGenerator.Emit(OpCodes.Ldloc, localMethodPtr.LocalIndex);
-            ilGenerator.EmitCalli(OpCodes.Calli, CallingConventions.HasThis, info.ReturnType, signatureParamTypes, null);
-            ilGenerator.Emit(OpCodes.Ret);
 
-            ilGenerator.MarkLabel(staticReplacement);
+            stub.LoadLocal(localInstance);
+            for (ushort i = 0; i < signatureParamTypes.Length; i++)
+                stub.LoadArgument(i);
+            stub.LoadLocal(localMethod);
+            stub.Call(MethodBaseGetMethodPointer);
+            stub.CallIndirect(CallingConventions.HasThis, info.ReturnType, signatureParamTypes);
+            stub.Return();
 
-            for (var i = 0; i < signatureParamTypes.Length; i++)
-                ilGenerator.Emit(OpCodes.Ldarg, i);
-            ilGenerator.Emit(OpCodes.Ldloc, localMethodPtr.LocalIndex);
-            ilGenerator.EmitCalli(OpCodes.Calli, CallingConventions.Standard, info.ReturnType, signatureParamTypes, null);
-            ilGenerator.Emit(OpCodes.Ret);
+            stub.MarkLabel(staticReplacement);
 
-            return stub;
+            for (ushort i = 0; i < signatureParamTypes.Length; i++)
+                stub.LoadArgument(i);
+            stub.LoadLocal(localMethod);
+            stub.Call(MethodBaseGetMethodPointer);
+            stub.CallIndirect(CallingConventions.Standard, info.ReturnType, signatureParamTypes);
+            stub.Return();
+
+            stub.MarkLabel(noReplacementFound);
+
+            for (ushort i = 0; i < parameterTypes.Length; i++)
+                stub.LoadArgument(i);
+            stub.LoadLocal(localMethod);
+            stub.Call(MethodBaseGetMethodPointer);
+            stub.CallIndirect(CallingConventions.Standard, info.ReturnType, parameterTypes);
+            stub.Return();
+            return stub.CreateDynamicMethod();
         }
 
         public static MethodInfo GenerateStub(ConstructorInfo info, bool newObject = true)
@@ -128,98 +148,99 @@ namespace NShim
                 Array.Copy(signatureParamTypes, parameterTypes, parameterTypes.Length - 1);
             }
             parameterTypes[parameterTypes.Length - 1] = typeof(ShimContext);
-
-            var stub = new DynamicMethod(
-                string.Format("stub_ctor_{0}_{1}", info.DeclaringType, info.Name),
-                newObject ? info.DeclaringType : typeof(void),
+            
+            var stub = Emit.NewDynamicMethod(newObject ? info.DeclaringType : typeof(void), 
                 parameterTypes,
-                typeof(StubGenerator).Module,
-                true);
+                string.Format("stub_ctor_{0}_{1}", info.DeclaringType, info.Name));
 
-            var ilGenerator = stub.GetILGenerator();
+            stub.DeclareLocal(info.DeclaringType, out var localType, "type");
+            stub.DeclareLocal<MethodBase>(out var localMethod, "method");
+            stub.DeclareLocal<object>(out var localInstance, "instance");
             
-            var constructorLabel = ilGenerator.DefineLabel();
+            stub.LoadArgument((ushort)(parameterTypes.Length - 1)); //Load ShimContext on stack
 
-            var localType = ilGenerator.DeclareLocal(info.DeclaringType);
-            var localInstance = ilGenerator.DeclareLocal(typeof(object));
-            var localMethod = ilGenerator.DeclareLocal(typeof(MethodBase));               //Actual method
+            stub.LoadConstant(info);
+            stub.LoadConstant(info.DeclaringType);
+            stub.Call(MethodBaseGetMethodFromHandle);
 
-            ilGenerator.Emit(OpCodes.Ldarg, parameterTypes.Length - 1); //Load ShimContext on stack
+            stub.LoadNull();
 
-            ilGenerator.Emit(OpCodes.Ldtoken, info);
-            ilGenerator.Emit(OpCodes.Ldtoken, info.DeclaringType);
-            ilGenerator.Emit(OpCodes.Call, MethodBaseGetMethodFromHandle);
+            stub.LoadLocalAddress(localMethod);
+            stub.LoadLocalAddress(localInstance); //Replacement instance out parameter
+            stub.Call(ShimContextTryGetReplacement);
+
+            stub.DefineLabel(out var noReplacementFound);
+
+            stub.BranchIfFalse(noReplacementFound);
             
-            ilGenerator.Emit(OpCodes.Ldnull);
-            ilGenerator.Emit(OpCodes.Ldloca, localInstance.LocalIndex);
-            ilGenerator.Emit(OpCodes.Call, ShimContextGetReplacement);
-            ilGenerator.Emit(OpCodes.Stloc, localMethod.LocalIndex);
-
-            ilGenerator.Emit(OpCodes.Ldloc, localMethod.LocalIndex);
-            ilGenerator.Emit(OpCodes.Isinst, typeof(ConstructorInfo));
-            
-            ilGenerator.Emit(OpCodes.Brtrue_S, constructorLabel);
-
             //Branch if we do not have an instance for our replacement
-            var staticReplacement = ilGenerator.DefineLabel();
-            ilGenerator.Emit(OpCodes.Ldloc, localInstance.LocalIndex);
-            ilGenerator.Emit(OpCodes.Brfalse_S, staticReplacement);
+            stub.LoadLocal(localInstance);
+            stub.DefineLabel(out var staticReplacement);
+            stub.BranchIfFalse(staticReplacement);
 
-            ilGenerator.Emit(OpCodes.Ldloc, localInstance.LocalIndex);
-            for (var i = 0; i < parameterTypes.Length - 1; i++)
-                ilGenerator.Emit(OpCodes.Ldarg, i);
-            ilGenerator.Emit(OpCodes.Ldloc, localMethod.LocalIndex);
-            ilGenerator.Emit(OpCodes.Call, MethodBaseGetMethodPointer);
-            ilGenerator.EmitCalli(OpCodes.Calli, CallingConventions.HasThis, info.DeclaringType, signatureParamTypes.Skip(1).ToArray(), null);
-            ilGenerator.Emit(OpCodes.Ret);
+            stub.LoadLocal(localInstance);
+            for (ushort i = 0; i < parameterTypes.Length - 1; i++)
+                stub.LoadArgument(i);
+            stub.LoadLocal(localMethod);
+            stub.Call(MethodBaseGetMethodPointer);
+            stub.CallIndirect(CallingConventions.HasThis, info.DeclaringType, parameterTypes.Take(parameterTypes.Length - 1).ToArray());
+            if (!newObject)
+                stub.Pop();
+            stub.Return();
 
-            ilGenerator.MarkLabel(staticReplacement);
+            stub.MarkLabel(staticReplacement);
 
-            for (var i = 0; i < parameterTypes.Length - 1; i++)
-                ilGenerator.Emit(OpCodes.Ldarg, i);
-            ilGenerator.Emit(OpCodes.Ldloc, localMethod.LocalIndex);
-            ilGenerator.Emit(OpCodes.Call, MethodBaseGetMethodPointer);
-            ilGenerator.EmitCalli(OpCodes.Calli, CallingConventions.Standard, info.DeclaringType, signatureParamTypes.Skip(1).ToArray(), null);
-            ilGenerator.Emit(OpCodes.Ret);
+            for (ushort i = 0; i < parameterTypes.Length - 1; i++)
+                stub.LoadArgument(i);
+            stub.LoadLocal(localMethod);
+            stub.Call(MethodBaseGetMethodPointer);
+            stub.CallIndirect(CallingConventions.Standard, info.DeclaringType, parameterTypes.Take(parameterTypes.Length - 1).ToArray());
+            if (!newObject)
+                stub.Pop();
+            stub.Return();
+
+
+            stub.MarkLabel(noReplacementFound);
             
-            ilGenerator.MarkLabel(constructorLabel);
-
             if (newObject)
             {
                 if (forValueType)
                 {
-                    ilGenerator.Emit(OpCodes.Ldloca, localType.LocalIndex);
-                    ilGenerator.Emit(OpCodes.Initobj, info.DeclaringType);
+                    stub.LoadLocalAddress(localType);
+                    stub.InitializeObject(info.DeclaringType);
                 }
                 else
                 {
-                    ilGenerator.Emit(OpCodes.Ldtoken, info.DeclaringType);
-                    ilGenerator.Emit(OpCodes.Call, TypeGetTypeFromHandle);
-                    ilGenerator.Emit(OpCodes.Call, GetUnitializedObject);
-                    ilGenerator.Emit(OpCodes.Stloc, localType.LocalIndex);
+                    stub.LoadConstant(info.DeclaringType);
+                    stub.Call(TypeGetTypeFromHandle);
+                    stub.Call(GetUnitializedObject);
+                    stub.CastClass(info.DeclaringType);
+                    stub.StoreLocal(localType);
                 }
             }
-            
-            int count = signatureParamTypes.Length;
+
+            var paramTypes = parameterTypes;
             if (newObject)
             {
                 if (forValueType)
-                    ilGenerator.Emit(OpCodes.Ldloca, localType.LocalIndex);
+                    stub.LoadLocalAddress(localType);
                 else
-                    ilGenerator.Emit(OpCodes.Ldloc, localType.LocalIndex);
-                count = count - 1;
+                    stub.LoadLocal(localType);
+                paramTypes = new Type[parameterTypes.Length + 1];
+                Array.Copy(parameterTypes, 0, paramTypes, 1, parameterTypes.Length);
+                paramTypes[0] = signatureParamTypes[0];
             }
-            for (int i = 0; i < count; i++)
-                ilGenerator.Emit(OpCodes.Ldarg, i);
-            ilGenerator.Emit(OpCodes.Ldloc, localMethod.LocalIndex);
-            ilGenerator.Emit(OpCodes.Call, MethodBaseGetMethodPointer);
-            ilGenerator.EmitCalli(OpCodes.Calli, CallingConventions.Standard, typeof(void), signatureParamTypes, null);
-            
-            if (newObject)
-                ilGenerator.Emit(OpCodes.Ldloc, localType.LocalIndex);
+            for (ushort i = 0; i < parameterTypes.Length; i++)
+                stub.LoadArgument(i);
+            stub.LoadLocal(localMethod);
+            stub.Call(MethodBaseGetMethodPointer);
+            stub.CallIndirect(CallingConventions.Standard, typeof(void), paramTypes);
 
-            ilGenerator.Emit(OpCodes.Ret);
-            return stub;
+            if (newObject)
+                stub.LoadLocal(localType);
+
+            stub.Return();
+            return stub.CreateDynamicMethod();
         }
 
         public static MethodInfo GenerateStubForVirtualMethod(MethodInfo info)
@@ -227,9 +248,31 @@ namespace NShim
             return GenerateStubForMethod(info, true);
         }
 
-        public static MethodInfo GenerateStubForMethodPointer(MethodInfo methodInfo)
+        public static MethodInfo GenerateStubForMethodPointer(MethodInfo info)
         {
-            throw new NotImplementedException();
+            var parameterTypes = new[] {typeof(ShimContext)};
+
+            var stub = Emit.NewDynamicMethod(typeof(IntPtr),
+                parameterTypes,
+                string.Format("stub_ftn_{0}_{1}", info.DeclaringType, info.Name));
+
+            stub.DeclareLocal<object>(out var localInstance, "instance");
+
+            stub.LoadArgument((ushort)(parameterTypes.Length - 1)); //Load ShimContext on stack
+
+            stub.LoadConstant(info);
+            stub.LoadConstant(info.DeclaringType);
+            stub.Call(MethodBaseGetMethodFromHandle);
+
+            stub.LoadNull();
+            stub.LoadLocalAddress(localInstance);
+            stub.Call(ShimContextGetReplacement);
+
+            stub.Call(MethodBaseGetMethodPointer);
+
+            stub.Return();
+
+            return stub.CreateDynamicMethod();
         }
 
         private static MethodInfo GetRuntimeMethodForVirtual(Type type, MethodInfo methodInfo)
