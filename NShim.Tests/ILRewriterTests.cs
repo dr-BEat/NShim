@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Reflection;
 using NShim.Tests.Examples;
 using Xunit;
@@ -47,32 +46,28 @@ namespace NShim.Tests
             Assert.Equal(12, result);
         }
 
-        [Fact(Skip = "Constructors")]
+        [Fact]
         public void RewriteConstructor()
         {
             var info = typeof(ExampleClass).GetConstructor(new[] { typeof(int) });
             var context = new ShimContext();
             var rewrite = ILRewriter.Rewrite(info, context);
 
-            var result = (ExampleClass)rewrite.Invoke(null, new object[] { new ExampleClass(2), 3, context });
-
-            Assert.NotNull(result);
-            Assert.Equal(3, result.Factor);
-
-            info = typeof(List<string>).GetConstructor(Type.EmptyTypes);
-            rewrite = ILRewriter.Rewrite(info, context);
+            var exampleClass = new ExampleClass(2);
+            rewrite.Invoke(null, new object[] { exampleClass, 3, context });
+            Assert.Equal(3, exampleClass.Factor);
             
-            var resultList = (List<string>)rewrite.Invoke(null, new object[]{ new List<string>(), context });
-            Assert.NotNull(resultList);
-            Assert.Empty(resultList);
-
             info = typeof(ExampleStruct).GetConstructor(new[] { typeof(int) });
             rewrite = ILRewriter.Rewrite(info, new ShimContext());
+            var dele = (ExampleStructConstructor)rewrite.CreateDelegate(typeof(ExampleStructConstructor));
 
-            var resultStruct = (ExampleStruct)rewrite.Invoke(null, new object[] { new ExampleStruct(2), 3 });
-
-            Assert.Equal(3, resultStruct.Factor);
+            var exampleStruct = new ExampleStruct(2);
+            dele(ref exampleStruct, 3, context);
+            
+            Assert.Equal(3, exampleStruct.Factor);
         }
+
+        private delegate void ExampleStructConstructor(ref ExampleStruct @this, int factor, ShimContext context);
 
         [Fact]
         public void RewriteLocalMethod()
