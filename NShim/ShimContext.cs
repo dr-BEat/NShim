@@ -17,7 +17,12 @@ namespace NShim
         {
             foreach (var s in _shims)
             {
-                if (s.Original == original && (s.Instance == null || s.Instance == instance))
+                //First check if the instance matches
+                if (s.Instance != null && !ReferenceEquals(s.Instance, instance))
+                    continue;
+                //Now check if the method is the same or overriden in a subclass
+                if (s.Original == original ||
+                    IsOverride(s.Original, original))
                 {
                     shim = s;
                     return true;
@@ -25,6 +30,21 @@ namespace NShim
             }
             shim = null;
             return false;
+        }
+
+        /// <summary>
+        /// Returns true if the overrideBase MethodBase is a MethodInfo for a method that overrides the 
+        /// method in shimMethodBase
+        /// </summary>
+        /// <param name="shimMethodBase"></param>
+        /// <param name="overrideBase"></param>
+        /// <returns></returns>
+        private static bool IsOverride(MethodBase shimMethodBase, MethodBase overrideBase)
+        {
+            return shimMethodBase is MethodInfo shimInfo &&
+                   overrideBase is MethodInfo info &&
+                   shimInfo.GetBaseDefinition() == info.GetBaseDefinition() &&
+                   shimInfo.DeclaringType.IsAssignableFrom(info.DeclaringType);
         }
 
         public MethodBase GetReplacement(MethodBase original, object instance, 

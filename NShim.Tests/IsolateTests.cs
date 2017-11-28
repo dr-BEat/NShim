@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using NShim.Tests.Examples;
 using Xunit;
 
@@ -177,6 +178,19 @@ namespace NShim.Tests
                 exampleClass.OutTestMethod(3, out result);
                 Assert.Equal(3, result);
             }, shim);
+        }
+
+        [Fact]
+        public void ShimSubFunctionCallTest()
+        {
+            var called = false;
+            Shim.Isolate(() =>
+            {
+                Assert.False(called);
+                Console.Out.WriteLine("Test");
+                Assert.True(called);
+            }, Shim.Replace(() => It.Any<TextWriter>().WriteLine(It.Any<string>()))
+                .With((Action<TextWriter, string>)((@this, str) => { called = true; })));
         }
     }
 }
