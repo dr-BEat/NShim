@@ -1,6 +1,20 @@
 The MIT License (MIT)
 
+Parts of the code in NShim are derived from the version of the 
+Pose project by Toni Solarin-Sodara listed below.
+
+Author    :  Toni Solarin-Sodara
+Version   :  1.0.1
+Date      :  11 November 2017
+Website   :  https://github.com/tonerdo/pose
+
+Copyright for portions of the derived code in NShim are held 
+by Toni Solarin-Sodara, 2017. All other copyright for NShim are held by 
+dr-BEat, 2017. This code is published in accordance with, and retains the same license
+as Pose by Toni Solarin-Sodara.
+
 Copyright (c) 2017 Toni Solarin-Sodara
+Copyright (c) 2017 dr-BEat
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
