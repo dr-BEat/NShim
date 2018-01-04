@@ -40,7 +40,7 @@ namespace NShim
         public static void Isolate(Action action, params Shim[] shims)
         {
             var shimContext = new ShimContext(shims);
-            var rewrite = ILRewriter.Rewrite(action.Method, shimContext);
+            var rewrite = ILRewriter.ILRewriter.Rewrite(action.Method, shimContext);
             rewrite.Invoke(null, new [] { action.Target, shimContext });
         }
 

@@ -58,7 +58,7 @@ namespace NShim
             replacementInstance = null;
             if (!_cache.TryGetValue(original, out var target))
             {
-                target = ILRewriter.Rewrite(original, this);
+                target = ILRewriter.ILRewriter.Rewrite(original, this);
                 _cache.Add(original, target);
             }
             return target;
@@ -75,7 +75,7 @@ namespace NShim
             }
             if (!_cache.TryGetValue(original, out var target))
             {
-                target = ILRewriter.Rewrite(original, this);
+                target = ILRewriter.ILRewriter.Rewrite(original, this);
                 _cache.Add(original, target);
             }
             replacement = target;

@@ -6,7 +6,7 @@ using System.Reflection.Emit;
 using NShim.Helpers;
 using NShim.ILReader;
 
-namespace NShim
+namespace NShim.ILRewriter
 {
     internal class ILRewriter
     {
