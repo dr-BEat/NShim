@@ -275,7 +275,7 @@ namespace NShim
             return stub.CreateDynamicMethod();
         }
 
-        private static MethodInfo GetRuntimeMethodForVirtual(Type type, MethodInfo methodInfo)
+        internal static MethodInfo GetRuntimeMethodForVirtual(Type type, MethodInfo methodInfo)
         {
             var bindingFlags = BindingFlags.Instance | (methodInfo.IsPublic ? BindingFlags.Public : BindingFlags.NonPublic);
             var types = methodInfo.GetParameters().Select(p => p.ParameterType).ToArray();

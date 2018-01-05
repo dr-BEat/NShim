@@ -192,5 +192,17 @@ namespace NShim.Tests
             }, Shim.Replace(() => It.Any<TextWriter>().WriteLine(It.Any<string>()))
                 .With((Action<TextWriter, string>)((@this, str) => { called = true; })));
         }
+
+        [Fact]
+        public void ShimMethodOnNullableTest()
+        {
+            var nullable = (bool?)false;
+            Shim.Isolate(() =>
+            {
+                //This creates a constrained opcode followed by a callvirt
+                //We have to handle this specially to avoid invalid il
+                nullable.ToString();
+            });
+        }
     }
 }

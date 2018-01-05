@@ -4,7 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using NShim.Helpers;
-using NShim.ILReader;
+using NShim.ILRewriter.Steps;
 
 namespace NShim.ILRewriter
 {
@@ -34,7 +34,7 @@ namespace NShim.ILRewriter
 
             var ilGenerator = dynamicMethod.GetILGenerator();
 
-            var targetInstructions = new Dictionary<int, Label>();
+            var targetInstructions = new Dictionary<ILProcessorInstruction, Label>();
 
             foreach (var local in method.GetMethodBody().LocalVariables)
             {
@@ -42,81 +42,104 @@ namespace NShim.ILRewriter
             }
 
             var ilReader = new ILReader.ILReader(method);
-            foreach (var instruction in ilReader)
+            var instructions = ilReader.ToList();
+            var processor = ILProcessor.FromILInstructions(instructions);
+
+            var steps = new[]
+            {
+                new RemoveConstrainedStep(),
+            };
+
+            foreach (var step in steps)
+            {
+                step.Rewriter(processor);
+            }
+            
+            foreach (var instruction in processor.Instructions)
             {
                 switch (instruction)
                 {
-                    case ShortInlineBrTargetInstruction brTargetInstruction:
-                        targetInstructions.TryAdd(brTargetInstruction.TargetOffset, ilGenerator.DefineLabel);
+                    case OperandProcessorInstruction<ILProcessorInstruction> branchInstruction:
+                        targetInstructions.TryAdd(branchInstruction.Operand, ilGenerator.DefineLabel);
                         break;
-                    case InlineBrTargetInstruction brTargetInstruction:
-                        targetInstructions.TryAdd(brTargetInstruction.TargetOffset, ilGenerator.DefineLabel);
-                        break;
-                    case InlineSwitchInstruction switchInstruction:
-                        foreach (var offset in switchInstruction.TargetOffsets)
+                    case OperandProcessorInstruction<IReadOnlyList<ILProcessorInstruction>> switchInstruction:
+                        foreach (var target in switchInstruction.Operand)
                         {
-                            targetInstructions.TryAdd(offset, ilGenerator.DefineLabel);
+                            targetInstructions.TryAdd(target, ilGenerator.DefineLabel);
                         }
                         break;
                 }
             }
 
-            foreach (var instruction in ilReader)
+            foreach (var instruction in processor.Instructions)
             {
-                if (targetInstructions.TryGetValue(instruction.Offset, out var label))
+                if (targetInstructions.TryGetValue(instruction, out var label))
                     ilGenerator.MarkLabel(label);
+                var opCode = instruction.OpCode;
                 switch (instruction)
                 {
-                    case InlineNoneInstruction none:
-                        ilGenerator.Emit(none.OpCode);
+                    case NoneProcessorInstruction _:
+                        ilGenerator.Emit(opCode);
                         break;
-                    case InlineIInstruction i:
-                        ilGenerator.Emit(instruction.OpCode, i.Operand);
-                        break;
-                    case InlineI8Instruction i8:
-                        ilGenerator.Emit(instruction.OpCode, i8.Operand);
-                        break;
-                    case ShortInlineIInstruction shortI:
-                        if (instruction.OpCode == OpCodes.Ldc_I4_S)
-                            ilGenerator.Emit(instruction.OpCode, (sbyte)shortI.Operand);
-                        else
-                            ilGenerator.Emit(instruction.OpCode, shortI.Operand);
-                        break;
-                    case InlineRInstruction r:
-                        ilGenerator.Emit(instruction.OpCode, r.Operand);
-                        break;
-                    case ShortInlineRInstruction shortR:
-                        ilGenerator.Emit(instruction.OpCode, shortR.Operand);
-                        break;
-                    case InlineStringInstruction str:
-                        ilGenerator.Emit(instruction.OpCode, str.Operand);
-                        break;
-                    case ShortInlineBrTargetInstruction _:
-                    case InlineBrTargetInstruction _:
-                        EmitILForInlineBrTarget(ilGenerator, instruction, targetInstructions);
-                        break;
-                    case InlineSwitchInstruction switchInstruction:
-                        EmitILForInlineSwitch(ilGenerator, switchInstruction, targetInstructions);
-                        break;
-                    case ShortInlineVarInstruction _:
-                    case InlineVarInstruction _:
+
+                    case OperandProcessorInstruction<byte> i when i.OpCode.OperandType == OperandType.ShortInlineVar:
                         EmitILForInlineVar(ilGenerator, instruction, method.IsStatic);
                         break;
-                    case InlineTokInstruction tok:
-                        ilGenerator.Emit(instruction.OpCode, tok.Token);
+                    case OperandProcessorInstruction<ushort> i when i.OpCode.OperandType == OperandType.InlineVar:
+                        EmitILForInlineVar(ilGenerator, instruction, method.IsStatic);
                         break;
-                    case InlineMethodInstruction methodInstruction:
-                        if(methodInstruction.Method is ConstructorInfo constructorInfo)
-                            EmitILForConstructor(ilGenerator, instruction, constructorInfo, parameterTypes.Count - 1);
+                    
+                    case OperandProcessorInstruction<byte> i:
+                        if (instruction.OpCode == OpCodes.Ldc_I4_S)
+                            ilGenerator.Emit(opCode, (sbyte)i.Operand);
                         else
-                            EmitILForMethod(ilGenerator, instruction, (MethodInfo)methodInstruction.Method, context, parameterTypes.Count - 1);
+                            ilGenerator.Emit(opCode, i.Operand);
                         break;
-                    case InlineFieldInstruction field:
-                        ilGenerator.Emit(instruction.OpCode, field.Operand);
+                    case OperandProcessorInstruction<short> i:
+                        ilGenerator.Emit(opCode, i.Operand);
                         break;
-                    case InlineTypeInstruction type:
-                        ilGenerator.Emit(instruction.OpCode, type.Operand);
+                    case OperandProcessorInstruction<int> i:
+                        ilGenerator.Emit(opCode, i.Operand);
                         break;
+                    case OperandProcessorInstruction<long> i:
+                        ilGenerator.Emit(opCode, i.Operand);
+                        break;
+                    case OperandProcessorInstruction<float> i:
+                        ilGenerator.Emit(opCode, i.Operand);
+                        break;
+                    case OperandProcessorInstruction<double> i:
+                        ilGenerator.Emit(opCode, i.Operand);
+                        break;
+                    case OperandProcessorInstruction<string> i:
+                        ilGenerator.Emit(opCode, i.Operand);
+                        break;
+                    case OperandProcessorInstruction<FieldInfo> i:
+                        ilGenerator.Emit(opCode, i.Operand);
+                        break;
+                    case OperandProcessorInstruction<Type> i:
+                        ilGenerator.Emit(opCode, i.Operand);
+                        break;
+                    /*case OperandProcessorInstruction<MemberInfo> i:
+                        ilGenerator.Emit(opCode, i.Operand);
+                        break;*/
+
+                    case OperandProcessorInstruction<ILProcessorInstruction> i:
+                        EmitILForInlineBrTarget(ilGenerator, i, targetInstructions);
+                        break;
+                    case OperandProcessorInstruction<IReadOnlyList<ILProcessorInstruction>> i:
+                        ilGenerator.Emit(i.OpCode, i.Operand.Select(t => targetInstructions[t]).ToArray());
+                        break;
+
+                    case OperandProcessorInstruction<MethodBase> i:
+                        if (i.Operand is ConstructorInfo constructorInfo)
+                            EmitILForConstructor(ilGenerator, i, constructorInfo, parameterTypes.Count - 1);
+                        else
+                            EmitILForMethod(ilGenerator, i, (MethodInfo)i.Operand, context, parameterTypes.Count - 1);
+                        break;
+
+                    /*case InlineTokInstruction tok:
+                        ilGenerator.Emit(instruction.OpCode, tok.Token);
+                        break;*/
                     default:
                         throw new NotSupportedException();
                 }
@@ -126,11 +149,9 @@ namespace NShim.ILRewriter
         }
 
         private static void EmitILForInlineBrTarget(ILGenerator ilGenerator,
-            ILInstruction instruction, Dictionary<int, Label> targetInstructions)
+            OperandProcessorInstruction<ILProcessorInstruction> instruction, Dictionary<ILProcessorInstruction, Label> targetInstructions)
         {
-            var targetOffset = (instruction as ShortInlineBrTargetInstruction)?.TargetOffset ??
-                               ((InlineBrTargetInstruction) instruction).TargetOffset;
-            var targetLabel = targetInstructions[targetOffset];
+            var targetLabel = targetInstructions[instruction.Operand];
             
             // Offset values could change and not be short form anymore
             if (instruction.OpCode == OpCodes.Br_S)
@@ -165,19 +186,11 @@ namespace NShim.ILRewriter
                 ilGenerator.Emit(instruction.OpCode, targetLabel);
         }
 
-        private static void EmitILForInlineSwitch(ILGenerator ilGenerator,
-            InlineSwitchInstruction instruction, Dictionary<int, Label> targetInstructions)
+        private static void EmitILForInlineVar(ILGenerator ilGenerator, ILProcessorInstruction instruction, bool isStatic)
         {
-            var targetLabels = new Label[instruction.TargetOffsets.Count];
-            for (var i = 0; i < instruction.TargetOffsets.Count; i++)
-                targetLabels[i] = targetInstructions[instruction.TargetOffsets[i]];
-            ilGenerator.Emit(instruction.OpCode, targetLabels);
-        }
-
-        private static void EmitILForInlineVar(ILGenerator ilGenerator, ILInstruction instruction, bool isStatic)
-        {
-            var index = (instruction as ShortInlineVarInstruction)?.Ordinal ??
-                               ((InlineVarInstruction)instruction).Ordinal;
+            var index = (instruction as OperandProcessorInstruction<ushort>)?.Operand ??
+                        (instruction as OperandProcessorInstruction<byte>)?.Operand ??
+                        throw new ArgumentException();
 
             if (!isStatic &&
                 (instruction.OpCode == OpCodes.Ldarg ||
@@ -201,7 +214,7 @@ namespace NShim.ILRewriter
                 ilGenerator.Emit(instruction.OpCode, (short) index);
         }
 
-        private static void EmitILForConstructor(ILGenerator ilGenerator, ILInstruction instruction,
+        private static void EmitILForConstructor(ILGenerator ilGenerator, OperandProcessorInstruction<MethodBase> instruction,
             ConstructorInfo constructorInfo, int contextParamIndex)
         {
             /*if (PoseContext.StubCache.TryGetValue(constructorInfo, out DynamicMethod stub))
@@ -233,7 +246,7 @@ namespace NShim.ILRewriter
             //PoseContext.StubCache.TryAdd(constructorInfo, stub);
         }
 
-        private static void EmitILForMethod(ILGenerator ilGenerator, ILInstruction instruction, MethodInfo methodInfo, ShimContext context, int contextParamIndex)
+        private static void EmitILForMethod(ILGenerator ilGenerator, OperandProcessorInstruction<MethodBase> instruction, MethodInfo methodInfo, ShimContext context, int contextParamIndex)
         {
             /*if (context.StubCache.TryGetValue(methodInfo, out DynamicMethod stub))
             {
