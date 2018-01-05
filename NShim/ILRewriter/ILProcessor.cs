@@ -46,13 +46,13 @@ namespace NShim.ILRewriter
             {
                 switch (instruction)
                 {
-                    case OperandProcessorInstruction<ILProcessorInstruction> branchInstruction:
+                    case OperandInstruction<ILProcessorInstruction> branchInstruction:
                         var targetOffset = (oldInstruction as InlineBrTargetInstruction)?.TargetOffset ??
                                            (oldInstruction as ShortInlineBrTargetInstruction)?.TargetOffset ??
                                            throw new ArgumentException();
                         branchInstruction.Operand = offsetMap[targetOffset];
                         break;
-                    case OperandProcessorInstruction<IReadOnlyList<ILProcessorInstruction>> switchInstruction:
+                    case OperandInstruction<IReadOnlyList<ILProcessorInstruction>> switchInstruction:
                         var targetOffsets = (oldInstruction as InlineSwitchInstruction)?.TargetOffsets ??
                                             throw new ArgumentException();
                         switchInstruction.Operand = targetOffsets.Select(o => offsetMap[o]).ToList();
@@ -67,40 +67,40 @@ namespace NShim.ILRewriter
                 switch (instruction)
                 {
                     case InlineNoneInstruction _:
-                        return new NoneProcessorInstruction(opCode);
+                        return new NoneInstruction(opCode);
                     case ShortInlineBrTargetInstruction _:
                     case InlineBrTargetInstruction _:
-                        return OperandProcessorInstruction.Create(opCode, (ILProcessorInstruction)null);
+                        return OperandInstruction.Create(opCode, (ILProcessorInstruction)null);
                     case InlineSwitchInstruction _:
-                        return OperandProcessorInstruction.Create(opCode, (IReadOnlyList<ILProcessorInstruction>)null);
+                        return OperandInstruction.Create(opCode, (IReadOnlyList<ILProcessorInstruction>)null);
                     case InlineFieldInstruction matched:
-                        return OperandProcessorInstruction.Create(opCode, matched.Operand);
+                        return OperandInstruction.Create(opCode, matched.Operand);
                     case InlineI8Instruction matched:
-                        return OperandProcessorInstruction.Create(opCode, matched.Operand);
+                        return OperandInstruction.Create(opCode, matched.Operand);
                     case InlineIInstruction matched:
-                        return OperandProcessorInstruction.Create(opCode, matched.Operand);
+                        return OperandInstruction.Create(opCode, matched.Operand);
                     case InlineMethodInstruction matched:
-                        return OperandProcessorInstruction.Create(opCode, matched.Method);
+                        return OperandInstruction.Create(opCode, matched.Method);
                     case InlineRInstruction matched:
-                        return OperandProcessorInstruction.Create(opCode, matched.Operand);
+                        return OperandInstruction.Create(opCode, matched.Operand);
                     case InlineSigInstruction matched:
-                        return OperandProcessorInstruction.Create(opCode, matched.Signature);
+                        return OperandInstruction.Create(opCode, matched.Signature);
                     case InlineStringInstruction matched:
-                        return OperandProcessorInstruction.Create(opCode, matched.Operand);
+                        return OperandInstruction.Create(opCode, matched.Operand);
                     case InlineTokInstruction matched:
-                        return OperandProcessorInstruction.Create(opCode, matched.Member);
+                        return OperandInstruction.Create(opCode, matched.Member);
                     case InlineTypeInstruction matched:
-                        return OperandProcessorInstruction.Create(opCode, matched.Operand);
+                        return OperandInstruction.Create(opCode, matched.Operand);
 
                     case ShortInlineVarInstruction matched:
-                        return OperandProcessorInstruction.Create(opCode, matched.Ordinal);
+                        return OperandInstruction.Create(opCode, matched.Ordinal);
                     case InlineVarInstruction matched:
-                        return OperandProcessorInstruction.Create(opCode, matched.Ordinal);
+                        return OperandInstruction.Create(opCode, matched.Ordinal);
 
                     case ShortInlineIInstruction matched:
-                        return OperandProcessorInstruction.Create(opCode, matched.Operand);
+                        return OperandInstruction.Create(opCode, matched.Operand);
                     case ShortInlineRInstruction matched:
-                        return OperandProcessorInstruction.Create(opCode, matched.Operand);
+                        return OperandInstruction.Create(opCode, matched.Operand);
                     default:
                         throw new ArgumentException("Unknown instruction!", nameof(instruction));
                 }
@@ -213,11 +213,11 @@ namespace NShim.ILRewriter
             {
                 switch (inst)
                 {
-                    case OperandProcessorInstruction<ILProcessorInstruction> branchInstruction
+                    case OperandInstruction<ILProcessorInstruction> branchInstruction
                     when branchInstruction.Operand == oldInstruction:
                         branchInstruction.Operand = newInstruction;
                         break;
-                    case OperandProcessorInstruction<IReadOnlyList<ILProcessorInstruction>> switchInstruction
+                    case OperandInstruction<IReadOnlyList<ILProcessorInstruction>> switchInstruction
                     when switchInstruction.Operand.Contains(oldInstruction):
                         switchInstruction.Operand = switchInstruction.Operand
                                          .Select(i => i != oldInstruction ? i : newInstruction)

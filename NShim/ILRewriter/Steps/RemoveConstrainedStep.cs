@@ -15,14 +15,14 @@ namespace NShim.ILRewriter.Steps
         public void Rewriter(ILProcessor processor)
         {
             var constraineds = processor.Instructions
-                                .OfType<OperandProcessorInstruction<Type>>()
+                                .OfType<OperandInstruction<Type>>()
                                 .Where(i => i.OpCode == OpCodes.Constrained)
                                 .ToList();
 
             foreach (var constrained in constraineds)
             {
                 var constrainedType = constrained.Operand;
-                var methodCall = (OperandProcessorInstruction<MethodBase>)constrained.Next;
+                var methodCall = (OperandInstruction<MethodBase>)constrained.Next;
 
                 //Remove the Constrained Instruction
                 processor.Remove(constrained);
@@ -37,7 +37,7 @@ namespace NShim.ILRewriter.Steps
                     {
                         //the method is directly implemented, just replace the CallVirt with a normal Call
                         processor.Replace(methodCall,
-                            OperandProcessorInstruction.Create<MethodBase>(OpCodes.Call, realMethod));
+                            OperandInstruction.Create<MethodBase>(OpCodes.Call, realMethod));
 
                         //For this case we are done!
                         continue;
@@ -53,15 +53,15 @@ namespace NShim.ILRewriter.Steps
                     //box struct
                     //call virt
 
-                    processor.InsertAfter(thisInstruction, new NoneProcessorInstruction(OpCodes.Box));
-                    processor.InsertAfter(thisInstruction, new NoneProcessorInstruction(OpCodes.Ldobj));
+                    processor.InsertAfter(thisInstruction, new NoneInstruction(OpCodes.Box));
+                    processor.InsertAfter(thisInstruction, new NoneInstruction(OpCodes.Ldobj));
                 }
                 else //this is a reference type
                 {
                     //ldind_ref
                     //call virt
                     
-                    processor.InsertAfter(thisInstruction, new NoneProcessorInstruction(OpCodes.Ldind_Ref));
+                    processor.InsertAfter(thisInstruction, new NoneInstruction(OpCodes.Ldind_Ref));
                 }
             }
         }
@@ -71,7 +71,7 @@ namespace NShim.ILRewriter.Steps
         /// </summary>
         /// <param name="methodCall"></param>
         /// <returns></returns>
-        private static ILProcessorInstruction FindThisInstruction(OperandProcessorInstruction<MethodBase> methodCall)
+        private static ILProcessorInstruction FindThisInstruction(OperandInstruction<MethodBase> methodCall)
         {
             var numParameters = methodCall.Operand.GetParameters().Length;
             var stackPos = numParameters;
@@ -94,7 +94,7 @@ namespace NShim.ILRewriter.Steps
         /// <returns></returns>
         private static int GetStackDelta(ILProcessorInstruction instruction)
         {
-            var method = (instruction as OperandProcessorInstruction<MethodBase>)?.Operand;
+            var method = (instruction as OperandInstruction<MethodBase>)?.Operand;
             var stackDelta = 0;
             switch (instruction.OpCode.StackBehaviourPop)
             {

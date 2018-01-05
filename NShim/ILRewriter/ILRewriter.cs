@@ -45,8 +45,9 @@ namespace NShim.ILRewriter
             var instructions = ilReader.ToList();
             var processor = ILProcessor.FromILInstructions(instructions);
 
-            var steps = new[]
+            var steps = new IILRewriterStep[]
             {
+                new RemoveShortBranchsStep(),
                 new RemoveConstrainedStep(),
             };
 
@@ -59,10 +60,10 @@ namespace NShim.ILRewriter
             {
                 switch (instruction)
                 {
-                    case OperandProcessorInstruction<ILProcessorInstruction> branchInstruction:
+                    case OperandInstruction<ILProcessorInstruction> branchInstruction:
                         targetInstructions.TryAdd(branchInstruction.Operand, ilGenerator.DefineLabel);
                         break;
-                    case OperandProcessorInstruction<IReadOnlyList<ILProcessorInstruction>> switchInstruction:
+                    case OperandInstruction<IReadOnlyList<ILProcessorInstruction>> switchInstruction:
                         foreach (var target in switchInstruction.Operand)
                         {
                             targetInstructions.TryAdd(target, ilGenerator.DefineLabel);
@@ -78,59 +79,57 @@ namespace NShim.ILRewriter
                 var opCode = instruction.OpCode;
                 switch (instruction)
                 {
-                    case NoneProcessorInstruction _:
+                    case NoneInstruction _:
                         ilGenerator.Emit(opCode);
                         break;
 
-                    case OperandProcessorInstruction<byte> i when i.OpCode.OperandType == OperandType.ShortInlineVar:
-                        EmitILForInlineVar(ilGenerator, instruction, method.IsStatic);
-                        break;
-                    case OperandProcessorInstruction<ushort> i when i.OpCode.OperandType == OperandType.InlineVar:
+                    case OperandInstruction<byte> bi when bi.OpCode.OperandType == OperandType.ShortInlineVar:
+                    case OperandInstruction<ushort> ui when ui.OpCode.OperandType == OperandType.InlineVar:
                         EmitILForInlineVar(ilGenerator, instruction, method.IsStatic);
                         break;
                     
-                    case OperandProcessorInstruction<byte> i:
+                    case OperandInstruction<byte> i:
                         if (instruction.OpCode == OpCodes.Ldc_I4_S)
                             ilGenerator.Emit(opCode, (sbyte)i.Operand);
                         else
                             ilGenerator.Emit(opCode, i.Operand);
                         break;
-                    case OperandProcessorInstruction<short> i:
+                    case OperandInstruction<short> i:
                         ilGenerator.Emit(opCode, i.Operand);
                         break;
-                    case OperandProcessorInstruction<int> i:
+                    case OperandInstruction<int> i:
                         ilGenerator.Emit(opCode, i.Operand);
                         break;
-                    case OperandProcessorInstruction<long> i:
+                    case OperandInstruction<long> i:
                         ilGenerator.Emit(opCode, i.Operand);
                         break;
-                    case OperandProcessorInstruction<float> i:
+                    case OperandInstruction<float> i:
                         ilGenerator.Emit(opCode, i.Operand);
                         break;
-                    case OperandProcessorInstruction<double> i:
+                    case OperandInstruction<double> i:
                         ilGenerator.Emit(opCode, i.Operand);
                         break;
-                    case OperandProcessorInstruction<string> i:
+                    case OperandInstruction<string> i:
                         ilGenerator.Emit(opCode, i.Operand);
                         break;
-                    case OperandProcessorInstruction<FieldInfo> i:
+                    case OperandInstruction<FieldInfo> i:
                         ilGenerator.Emit(opCode, i.Operand);
                         break;
-                    case OperandProcessorInstruction<Type> i:
+                    case OperandInstruction<Type> i:
                         ilGenerator.Emit(opCode, i.Operand);
                         break;
-                    /*case OperandProcessorInstruction<MemberInfo> i:
+                    /*case OperandInstruction<MemberInfo> i:
                         ilGenerator.Emit(opCode, i.Operand);
                         break;*/
 
-                    case OperandProcessorInstruction<ILProcessorInstruction> i:
-                        EmitILForInlineBrTarget(ilGenerator, i, targetInstructions);
+                    case OperandInstruction<ILProcessorInstruction> i:
+                        ilGenerator.Emit(i.OpCode, targetInstructions[i.Operand]);
                         break;
-                    case OperandProcessorInstruction<IReadOnlyList<ILProcessorInstruction>> i:
+                    case OperandInstruction<IReadOnlyList<ILProcessorInstruction>> i:
                         ilGenerator.Emit(i.OpCode, i.Operand.Select(t => targetInstructions[t]).ToArray());
                         break;
 
-                    case OperandProcessorInstruction<MethodBase> i:
+                    case OperandInstruction<MethodBase> i:
                         if (i.Operand is ConstructorInfo constructorInfo)
                             EmitILForConstructor(ilGenerator, i, constructorInfo, parameterTypes.Count - 1);
                         else
@@ -148,48 +147,10 @@ namespace NShim.ILRewriter
             return dynamicMethod;
         }
 
-        private static void EmitILForInlineBrTarget(ILGenerator ilGenerator,
-            OperandProcessorInstruction<ILProcessorInstruction> instruction, Dictionary<ILProcessorInstruction, Label> targetInstructions)
-        {
-            var targetLabel = targetInstructions[instruction.Operand];
-            
-            // Offset values could change and not be short form anymore
-            if (instruction.OpCode == OpCodes.Br_S)
-                ilGenerator.Emit(OpCodes.Br, targetLabel);
-            else if (instruction.OpCode == OpCodes.Brfalse_S)
-                ilGenerator.Emit(OpCodes.Brfalse, targetLabel);
-            else if (instruction.OpCode == OpCodes.Brtrue_S)
-                ilGenerator.Emit(OpCodes.Brtrue, targetLabel);
-            else if (instruction.OpCode == OpCodes.Beq_S)
-                ilGenerator.Emit(OpCodes.Beq, targetLabel);
-            else if (instruction.OpCode == OpCodes.Bge_S)
-                ilGenerator.Emit(OpCodes.Bge, targetLabel);
-            else if (instruction.OpCode == OpCodes.Bgt_S)
-                ilGenerator.Emit(OpCodes.Bgt, targetLabel);
-            else if (instruction.OpCode == OpCodes.Ble_S)
-                ilGenerator.Emit(OpCodes.Ble, targetLabel);
-            else if (instruction.OpCode == OpCodes.Blt_S)
-                ilGenerator.Emit(OpCodes.Blt, targetLabel);
-            else if (instruction.OpCode == OpCodes.Bne_Un_S)
-                ilGenerator.Emit(OpCodes.Bne_Un, targetLabel);
-            else if (instruction.OpCode == OpCodes.Bge_Un_S)
-                ilGenerator.Emit(OpCodes.Bge_Un, targetLabel);
-            else if (instruction.OpCode == OpCodes.Bgt_Un_S)
-                ilGenerator.Emit(OpCodes.Bgt_Un, targetLabel);
-            else if (instruction.OpCode == OpCodes.Ble_Un_S)
-                ilGenerator.Emit(OpCodes.Ble_Un, targetLabel);
-            else if (instruction.OpCode == OpCodes.Blt_Un_S)
-                ilGenerator.Emit(OpCodes.Blt_Un, targetLabel);
-            else if (instruction.OpCode == OpCodes.Leave_S)
-                ilGenerator.Emit(OpCodes.Leave, targetLabel);
-            else
-                ilGenerator.Emit(instruction.OpCode, targetLabel);
-        }
-
         private static void EmitILForInlineVar(ILGenerator ilGenerator, ILProcessorInstruction instruction, bool isStatic)
         {
-            var index = (instruction as OperandProcessorInstruction<ushort>)?.Operand ??
-                        (instruction as OperandProcessorInstruction<byte>)?.Operand ??
+            var index = (instruction as OperandInstruction<ushort>)?.Operand ??
+                        (instruction as OperandInstruction<byte>)?.Operand ??
                         throw new ArgumentException();
 
             if (!isStatic &&
@@ -214,7 +175,7 @@ namespace NShim.ILRewriter
                 ilGenerator.Emit(instruction.OpCode, (short) index);
         }
 
-        private static void EmitILForConstructor(ILGenerator ilGenerator, OperandProcessorInstruction<MethodBase> instruction,
+        private static void EmitILForConstructor(ILGenerator ilGenerator, OperandInstruction<MethodBase> instruction,
             ConstructorInfo constructorInfo, int contextParamIndex)
         {
             /*if (PoseContext.StubCache.TryGetValue(constructorInfo, out DynamicMethod stub))
@@ -246,7 +207,7 @@ namespace NShim.ILRewriter
             //PoseContext.StubCache.TryAdd(constructorInfo, stub);
         }
 
-        private static void EmitILForMethod(ILGenerator ilGenerator, OperandProcessorInstruction<MethodBase> instruction, MethodInfo methodInfo, ShimContext context, int contextParamIndex)
+        private static void EmitILForMethod(ILGenerator ilGenerator, OperandInstruction<MethodBase> instruction, MethodInfo methodInfo, ShimContext context, int contextParamIndex)
         {
             /*if (context.StubCache.TryGetValue(methodInfo, out DynamicMethod stub))
             {

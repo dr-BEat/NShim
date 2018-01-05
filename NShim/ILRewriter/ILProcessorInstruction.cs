@@ -16,34 +16,34 @@ namespace NShim.ILRewriter
         public ILProcessorInstruction Next { get; internal set; }
     }
 
-    public class NoneProcessorInstruction : ILProcessorInstruction
+    public class NoneInstruction : ILProcessorInstruction
     {
-        internal NoneProcessorInstruction(OpCode opCode)
+        internal NoneInstruction(OpCode opCode)
             : base(opCode)
         {
         }
     }
 
-    public abstract class OperandProcessorInstruction : ILProcessorInstruction
+    public abstract class OperandInstruction : ILProcessorInstruction
     {
         public Type OperandType { get; }
         
-        internal OperandProcessorInstruction(OpCode opCode, Type operandType)
+        internal OperandInstruction(OpCode opCode, Type operandType)
             : base(opCode)
         {
             OperandType = operandType;
         }
 
-        internal static OperandProcessorInstruction<T> Create<T>(OpCode opCode, T operand) =>
-            new OperandProcessorInstruction<T>(opCode, operand);
+        internal static OperandInstruction<T> Create<T>(OpCode opCode, T operand) =>
+            new OperandInstruction<T>(opCode, operand);
     }
 
-    public class OperandProcessorInstruction<T> : OperandProcessorInstruction
+    public class OperandInstruction<T> : OperandInstruction
     {
         //public override object Operand { get; internal set; }
         public T Operand { get; internal set; }
 
-        internal OperandProcessorInstruction(OpCode opCode, T operand)
+        internal OperandInstruction(OpCode opCode, T operand)
             : base(opCode, typeof(T))
         {
             Operand = operand;
