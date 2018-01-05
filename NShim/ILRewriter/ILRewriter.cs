@@ -49,6 +49,7 @@ namespace NShim.ILRewriter
             {
                 new RemoveShortBranchsStep(),
                 new RemoveConstrainedStep(),
+                new OptimizeBranchesStep(), 
             };
 
             foreach (var step in steps)
