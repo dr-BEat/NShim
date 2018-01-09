@@ -49,7 +49,7 @@ namespace NShim.ILRewriter
             {
                 new RemoveShortBranchsStep(),
                 new RemoveConstrainedStep(),
-                new OptimizeBranchesStep(), 
+                new OptimizeBranchesStep(),
             };
 
             foreach (var step in steps)
@@ -83,11 +83,6 @@ namespace NShim.ILRewriter
                     case NoneInstruction _:
                         ilGenerator.Emit(opCode);
                         break;
-
-                    case OperandInstruction<byte> bi when bi.OpCode.OperandType == OperandType.ShortInlineVar:
-                    case OperandInstruction<ushort> ui when ui.OpCode.OperandType == OperandType.InlineVar:
-                        EmitILForInlineVar(ilGenerator, instruction, method.IsStatic);
-                        break;
                     
                     case OperandInstruction<byte> i:
                         if (instruction.OpCode == OpCodes.Ldc_I4_S)
@@ -97,6 +92,10 @@ namespace NShim.ILRewriter
                         break;
                     case OperandInstruction<short> i:
                         ilGenerator.Emit(opCode, i.Operand);
+                        break;
+                    case OperandInstruction<ushort> i:
+                        //Some instructions like ldarg require a unsigned int16 operand but ilGenerator only supports signed int16
+                        ilGenerator.Emit(opCode, (short)i.Operand);
                         break;
                     case OperandInstruction<int> i:
                         ilGenerator.Emit(opCode, i.Operand);
@@ -147,35 +146,7 @@ namespace NShim.ILRewriter
 
             return dynamicMethod;
         }
-
-        private static void EmitILForInlineVar(ILGenerator ilGenerator, ILProcessorInstruction instruction, bool isStatic)
-        {
-            var index = (instruction as OperandInstruction<ushort>)?.Operand ??
-                        (instruction as OperandInstruction<byte>)?.Operand ??
-                        throw new ArgumentException();
-
-            if (!isStatic &&
-                (instruction.OpCode == OpCodes.Ldarg ||
-                 instruction.OpCode == OpCodes.Ldarg_0 ||
-                 instruction.OpCode == OpCodes.Ldarg_1 ||
-                 instruction.OpCode == OpCodes.Ldarg_2 ||
-                 instruction.OpCode == OpCodes.Ldarg_3 ||
-                 instruction.OpCode == OpCodes.Ldarg_S ||
-                 instruction.OpCode == OpCodes.Ldarga ||
-                 instruction.OpCode == OpCodes.Ldarga_S ||
-                 instruction.OpCode == OpCodes.Starg ||
-                 instruction.OpCode == OpCodes.Starg_S
-                ))
-            {
-                index++;
-            }
-            
-            if (instruction.OpCode.OperandType == OperandType.ShortInlineVar)
-                ilGenerator.Emit(instruction.OpCode, (byte) index);
-            else
-                ilGenerator.Emit(instruction.OpCode, (short) index);
-        }
-
+        
         private static void EmitILForConstructor(ILGenerator ilGenerator, OperandInstruction<MethodBase> instruction,
             ConstructorInfo constructorInfo, int contextParamIndex)
         {
